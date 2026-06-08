@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Phantom Cells</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div id="setup-screen" class="screen active">
+            <h1 class="glitch" data-text="PHANTOM CELLS">PHANTOM CELLS</h1>
+            <div class="panel">
+                <input type="text" id="player-name" placeholder="ENTER CODENAME" maxlength="12" autocomplete="off">
+                <div class="actions">
+                    <button class="btn blue" onclick="app.hostGame()">HOST GAME</button>
+                    <div class="divider">OR</div>
+                    <input type="text" id="room-code-input" placeholder="ROOM CODE" autocomplete="off">
+                    <button class="btn red" onclick="app.joinGame()">JOIN ROOM</button>
+                </div>
+                <p id="setup-error" class="error-text"></p>
+            </div>
+        </div>
+
+        <div id="lobby-screen" class="screen">
+            <h2>LOBBY: <span id="display-room-code" class="highlight"></span></h2>
+            <div class="panel">
+                <div class="host-controls" id="host-controls" style="display: none;">
+                    <label>TEAM SIZE:</label>
+                    <select id="team-size-select" onchange="app.changeTeamSize()">
+                        <option value="2">2v2</option>
+                        <option value="3">3v3</option>
+                        <option value="4">4v4</option>
+                        <option value="5" selected>5v5</option>
+                        <option value="6">6v6</option>
+                    </select>
+                </div>
+                <div class="teams-container">
+                    <div class="team-list blue-team">
+                        <h3>TEAM BLUE</h3>
+                        <ul id="blue-team-list"></ul>
+                    </div>
+                    <div class="team-list red-team">
+                        <h3>TEAM RED</h3>
+                        <ul id="red-team-list"></ul>
+                    </div>
+                </div>
+                <button id="start-game-btn" class="btn full-width" style="display:none;" onclick="app.startGame()">START MISSION</button>
+            </div>
+        </div>
+
+        <div id="game-screen" class="screen">
+            <div class="top-bar panel">
+                <div class="stat">ROUND: <span id="round-display">1</span></div>
+                <div class="stat timer" id="timer-display">30</div>
+                <div class="stat">ALIVE: <span id="alive-display">0</span></div>
+            </div>
+
+            <div class="game-area">
+                <div class="board-container enemy-board">
+                    <h3 class="board-title">ENEMY SECTOR (TARGETS)</h3>
+                    <div id="enemy-grid" class="grid"></div>
+                </div>
+
+                <div class="controls panel">
+                    <div id="action-status">AWAITING ORDERS</div>
+                    <div class="action-buttons">
+                        <button class="btn act-btn" id="btn-move" onclick="app.selectAction('move')">MOVE</button>
+                        <button class="btn act-btn" id="btn-defend" onclick="app.selectAction('defend')">DEFEND</button>
+                        <button class="btn act-btn red" id="btn-attack" onclick="app.selectAction('attack')">ATTACK</button>
+                    </div>
+                    <button class="btn full-width neon-green" id="btn-ready" onclick="app.submitReady()">READY</button>
+                </div>
+
+                <div class="board-container ally-board">
+                    <h3 class="board-title">ALLIED SECTOR</h3>
+                    <div id="ally-grid" class="grid"></div>
+                </div>
+            </div>
+
+            <div class="history-panel panel">
+                <h3>COMBAT LOG</h3>
+                <div id="history-log"></div>
+            </div>
+        </div>
+
+        <div id="end-screen" class="screen">
+            <h1 id="winner-text" class="glitch"></h1>
+            <div class="panel">
+                <button class="btn" onclick="location.reload()">RETURN TO BASE</button>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
