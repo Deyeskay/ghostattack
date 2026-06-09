@@ -88,11 +88,19 @@
             </div>
 
             <div class="game-area">
+                
                 <div class="board-container enemy-board">
                     <h3 class="board-title">ENEMY SECTOR (TARGETS)</h3>
                     <div id="enemy-grid" class="grid"></div>
                 </div>
 
+                <hr style="border: 2px solid #25434e;">
+ 
+                <div class="board-container ally-board">
+                    <h3 class="board-title">ALLIED SECTOR</h3>
+                    <div id="ally-grid" class="grid"></div>
+                </div>
+ 
                 <div class="controls panel">
                     <div id="action-status">AWAITING ORDERS</div>
                     <div class="action-buttons">
@@ -102,11 +110,7 @@
                     </div>
                     <button class="btn full-width neon-green" id="btn-ready" onclick="app.submitReady()">READY</button>
                 </div>
-
-                <div class="board-container ally-board">
-                    <h3 class="board-title">ALLIED SECTOR</h3>
-                    <div id="ally-grid" class="grid"></div>
-                </div>
+                
             </div>
 
             <div class="history-panel panel">
