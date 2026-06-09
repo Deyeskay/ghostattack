@@ -27,8 +27,9 @@
             <h2>LOBBY: <span id="display-room-code" class="highlight"></span></h2>
             <div class="panel">
                 <div class="host-controls" id="host-controls" style="display: none;">
-                    <label>TEAM SIZE:</label>
+                    <label>MAX TEAM SIZE:</label>
                     <select id="team-size-select" onchange="app.changeTeamSize()">
+                        <option value="1">1v1</option>
                         <option value="2">2v2</option>
                         <option value="3">3v3</option>
                         <option value="4">4v4</option>
@@ -46,7 +47,9 @@
                         <ul id="red-team-list"></ul>
                     </div>
                 </div>
-                <button id="start-game-btn" class="btn full-width" style="display:none;" onclick="app.startGame()">START MISSION</button>
+                <button id="start-game-btn" class="btn full-width blue" style="display:none;" onclick="app.startGame()">START MISSION</button>
+                <button class="btn full-width red" onclick="app.returnToBase()">EXIT LOBBY</button>
+                <p id="lobby-error" class="error-text"></p>
             </div>
         </div>
 
@@ -55,6 +58,7 @@
                 <div class="stat">ROUND: <span id="round-display">1</span></div>
                 <div class="stat timer" id="timer-display">30</div>
                 <div class="stat">ALIVE: <span id="alive-display">0</span></div>
+                <button id="host-abort-btn" class="btn red abort-btn" style="display: none;" onclick="app.openConfirmModal()">ABORT</button>
             </div>
 
             <div class="game-area">
@@ -80,15 +84,34 @@
             </div>
 
             <div class="history-panel panel">
-                <h3>COMBAT LOG</h3>
+                <h3>PERMANENT COMBAT LOG</h3>
                 <div id="history-log"></div>
+            </div>
+        </div>
+
+        <div id="result-modal" class="modal-overlay">
+            <div class="modal-content panel">
+                <h2 class="neon-text-red">ROUND RESOLUTION</h2>
+                <div id="modal-log" class="modal-log-container"></div>
+                <button id="modal-close-btn" class="btn full-width neon-green" onclick="app.submitProceed()">PROCEED (<span id="modal-timer">15</span>s)</button>
+            </div>
+        </div>
+
+        <div id="confirm-modal" class="modal-overlay">
+            <div class="modal-content panel">
+                <h2 class="neon-text-red">TERMINATE MATCH?</h2>
+                <p class="confirm-message">Are you sure you want to force end the game session? This will disconnect active diagnostics for all players.</p>
+                <div class="action-buttons">
+                    <button class="btn red full-width" onclick="app.executeEndGame()">YES, ABORT</button>
+                    <button class="btn blue full-width" onclick="app.closeConfirmModal()">CANCEL</button>
+                </div>
             </div>
         </div>
 
         <div id="end-screen" class="screen">
             <h1 id="winner-text" class="glitch"></h1>
             <div class="panel">
-                <button class="btn" onclick="location.reload()">RETURN TO BASE</button>
+                <button class="btn full-width blue" onclick="app.returnToBase()">RETURN TO BASE</button>
             </div>
         </div>
     </div>
