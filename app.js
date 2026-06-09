@@ -11,24 +11,25 @@ const app = {
     isHost: false,
     connections: [],
     hasManuallyChangedSize: false,
+    lastAnimatedRound: 0, 
     
-    // Local configuration panel cache
     config: {
         detailedLog: true,
         attackCooldown: false
     },
     
     state: {
-        phase: 'SETUP', // SETUP, SETTINGS, LOBBY, PLAYING, INTERMISSION, GAMEOVER
+        phase: 'SETUP', 
         roomCode: '',
         teamSize: 5,
         round: 1,
         timeLeft: CONFIG.ROUND_TIME,
-        detailedLogEnabled: true,     // Authoritative synced logging rule
-        attackCooldownEnabled: false,  // Authoritative synced weapon rule
-        players: {}, // peerId -> { id, name, team, col, pos, alive, action, ready, connected, defending, proceeded, attackCooldown }
+        detailedLogEnabled: true,     
+        attackCooldownEnabled: false,  
+        players: {}, 
         history: [],
         lastRoundEvents: [],
+        roundAnimations: [], 
         winner: ''
     },
 
@@ -40,7 +41,6 @@ const app = {
         const savedName = localStorage.getItem('pc_name');
         if (savedName) document.getElementById('player-name').value = savedName;
         
-        // Load initial values from host configuration cache
         const localDetailedLog = localStorage.getItem('pc_cfg_detailed_log');
         app.config.detailedLog = localDetailedLog !== null ? (localDetailedLog === 'true') : true;
         
@@ -94,8 +94,8 @@ const app = {
         localStorage.setItem('pc_name', name);
         app.isHost = true;
         app.hasManuallyChangedSize = false;
+        app.lastAnimatedRound = 0;
         
-        // Lock rules configuration directly into authoritative session flags
         app.state.detailedLogEnabled = app.config.detailedLog;
         app.state.attackCooldownEnabled = app.config.attackCooldown;
         
@@ -255,7 +255,7 @@ const app = {
         const p = app.state.players[id];
         if (!p || !p.alive || p.ready || app.state.phase !== 'PLAYING') return;
         
-        if (app.state.attackCooldownEnabled && p.attackCooldown && actionData.type === 'attack') {
+        if (app.state.attackCooldownEnabled && p.attackCooldown && actionData && actionData.type === 'attack') {
             return; 
         }
         
@@ -351,10 +351,10 @@ const app = {
     resolveRound() {
         const players = app.state.players;
         const roundEvents = [];
+        const animEvents = []; 
         
         roundEvents.push(`<div class="log-round">ROUND ${app.state.round} RESOLUTION</div>`);
 
-        // Phase 1: Move evaluation
         for (const id in players) {
             const p = players[id];
             p.defending = false;
@@ -365,15 +365,19 @@ const app = {
             }
         }
 
-        // Phase 2: Defense registration
         for (const id in players) {
             const p = players[id];
             if (p.alive && p.action && p.action.type === 'defend') {
                 p.defending = true;
+                animEvents.push({
+                    type: 'defend',
+                    team: p.team,
+                    cell: `${p.pos}${p.col}`,
+                    blockedAttack: false
+                });
             }
         }
 
-        // Phase 3: Snapshot generation
         const aliveAtStartOfAttack = {};
         for (const id in players) {
             aliveAtStartOfAttack[id] = players[id].alive;
@@ -381,7 +385,6 @@ const app = {
 
         const registeredCasualties = new Set();
 
-        // Phase 4: Attack matrix calculations
         for (const id in players) {
             const attacker = players[id];
             if (aliveAtStartOfAttack[id] && attacker.action && attacker.action.type === 'attack') {
@@ -396,26 +399,40 @@ const app = {
                     p.team === enemyTeam && p.col === targetCol && p.pos === targetRow && p.alive
                 );
 
+                let attackOutcome = 'miss';
+
                 if (!targetPlayer) {
                     roundEvents.push(`<span class="log-event miss">[MISS] ${attacker.name} broadsided cell ${targetCell}</span>`);
                 } else if (targetPlayer.defending) {
+                    attackOutcome = 'blocked';
                     roundEvents.push(`<span class="log-event blocked">[BLOCKED] ${attacker.name} struck ${targetCell} &rarr; Deflected by ${targetPlayer.name}</span>`);
+                    
+                    const defNode = animEvents.find(a => a.type === 'defend' && a.team === targetPlayer.team && a.cell === targetCell);
+                    if (defNode) defNode.blockedAttack = true;
                 } else {
+                    attackOutcome = 'hit';
                     registeredCasualties.add(targetPlayer.id);
                     roundEvents.push(`<span class="log-event eliminated">[ELIMINATED] ${attacker.name} mapped critical hit on ${targetCell} &rarr; ${targetPlayer.name} down</span>`);
                 }
+
+                animEvents.push({
+                    type: 'attack',
+                    attackerTeam: attacker.team,
+                    attackerCell: `${attacker.pos}${attacker.col}`,
+                    targetCell: targetCell,
+                    outcome: attackOutcome
+                });
             }
         }
 
-        // Phase 5: Simultaneous structural execution
         registeredCasualties.forEach(targetId => {
             if (players[targetId]) players[targetId].alive = false;
         });
 
         app.state.lastRoundEvents = roundEvents;
+        app.state.roundAnimations = animEvents; 
         app.state.history.push(...roundEvents);
 
-        // Reset tracking flags and establish weapon lock cycles
         for (const id in players) {
             const p = players[id];
             
@@ -459,6 +476,7 @@ const app = {
         app.myName = name;
         localStorage.setItem('pc_name', name);
         app.isHost = false;
+        app.lastAnimatedRound = 0;
         
         try {
             app.myId = await app.setupPeer(name + Math.random().toString(16).slice(2));
@@ -485,7 +503,6 @@ const app = {
         }
     },
 
-    // Evaluates the synced game rules instead of local storage values
     filterLogs(logArray) {
         if (app.state.detailedLogEnabled) return logArray;
         
@@ -498,8 +515,16 @@ const app = {
     },
 
     processState(newState) {
+        const oldPhase = app.state ? app.state.phase : null;
         app.state = newState;
         
+        // BUG FIX: Completely wipe local selection cache when transitioning into a new live match turn phase
+        if ((oldPhase === 'LOBBY' || oldPhase === 'INTERMISSION') && newState.phase === 'PLAYING') {
+            app.selectedAction = null;
+            document.querySelectorAll('.act-btn').forEach(b => b.classList.remove('active-action'));
+            document.getElementById('action-status').innerText = "AWAITING ORDERS";
+        }
+
         const abortBtn = document.getElementById('host-abort-btn');
         if (app.isHost && (app.state.phase === 'PLAYING' || app.state.phase === 'INTERMISSION')) {
             abortBtn.style.display = 'block';
@@ -523,23 +548,13 @@ const app = {
             }
             app.renderGame();
             
-            const me = app.state.players[app.myId];
-            if (me && !me.proceeded) {
-                const modal = document.getElementById('result-modal');
-                
-                let cleanLogs = app.filterLogs(app.state.lastRoundEvents);
-                
-                // Fallback check if log output is completely clean of structural events
-                const hasEvents = cleanLogs.some(line => line.includes('log-event'));
-                if (!hasEvents) {
-                    cleanLogs.push(`<span class="log-event safe-status" style="color: var(--neon-green); border-left-color: var(--neon-green);">ALL SECTORS SECURE. EVERYONE IS SAFE.</span>`);
-                }
-                
-                document.getElementById('modal-log').innerHTML = cleanLogs.join('');
-                document.getElementById('modal-timer').innerText = app.state.timeLeft;
-                modal.classList.add('active');
+            if (app.lastAnimatedRound < app.state.round) {
+                app.runRoundAnimations(() => {
+                    app.lastAnimatedRound = app.state.round;
+                    app.showResolutionModal();
+                });
             } else {
-                document.getElementById('result-modal').classList.remove('active');
+                app.showResolutionModal();
             }
         } else if (app.state.phase === 'GAMEOVER') {
             document.getElementById('result-modal').classList.remove('active');
@@ -552,6 +567,107 @@ const app = {
             } else {
                 document.getElementById('winner-text').style.color = '#ffffff';
             }
+        }
+    },
+
+    runRoundAnimations(callback) {
+        const me = app.state.players[app.myId];
+        const myTeam = me ? me.team : 'BLUE';
+        const anims = app.state.roundAnimations || [];
+
+        if (anims.length === 0) {
+            callback();
+            return;
+        }
+
+        anims.forEach(anim => {
+            if (anim.type === 'defend') {
+                const isAllyCell = (anim.team === myTeam);
+                if (isAllyCell || anim.blockedAttack) {
+                    const cellEl = document.getElementById(isAllyCell ? `ally-${anim.cell}` : `enemy-${anim.cell}`);
+                    if (cellEl) {
+                        const shield = document.createElement('div');
+                        shield.className = 'animated-shield';
+                        shield.innerHTML = '🛡️';
+                        cellEl.appendChild(shield);
+                        setTimeout(() => shield.remove(), 2000);
+                    }
+                }
+            }
+
+            if (anim.type === 'attack') {
+                const targetIsAlly = (anim.attackerTeam !== myTeam);
+                const targetEl = document.getElementById(targetIsAlly ? `ally-${anim.targetCell}` : `enemy-${anim.targetCell}`);
+                if (!targetEl) return;
+
+                const targetRect = targetEl.getBoundingClientRect();
+                let startX, startY;
+                let rotation = 0;
+
+                if (anim.attackerTeam === myTeam) {
+                    const attackerEl = document.getElementById(`ally-${anim.attackerCell}`);
+                    if (attackerEl) {
+                        const attackerRect = attackerEl.getBoundingClientRect();
+                        startX = attackerRect.left + attackerRect.width / 2;
+                        startY = attackerRect.top + attackerRect.height / 2;
+                    } else {
+                        startX = window.innerWidth / 2;
+                        startY = window.innerHeight;
+                    }
+                    rotation = -45; 
+                } else {
+                    startX = targetRect.left + targetRect.width / 2;
+                    startY = 0; 
+                    rotation = 135; 
+                }
+
+                const endX = targetRect.left + targetRect.width / 2;
+                const endY = targetRect.top + targetRect.height / 2;
+
+                const missile = document.createElement('div');
+                missile.className = 'animated-missile';
+                missile.innerHTML = '🚀';
+                missile.style.left = `${startX}px`;
+                missile.style.top = `${startY}px`;
+                missile.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+                document.body.appendChild(missile);
+
+                missile.getBoundingClientRect();
+
+                missile.style.left = `${endX}px`;
+                missile.style.top = `${endY}px`;
+
+                setTimeout(() => {
+                    missile.remove();
+                    if (anim.outcome === 'hit') {
+                        const explosion = document.createElement('div');
+                        explosion.className = 'cell-explosion';
+                        targetEl.appendChild(explosion);
+                        setTimeout(() => explosion.remove(), 800);
+                    }
+                }, 1500);
+            }
+        });
+
+        setTimeout(callback, 2800);
+    },
+
+    showResolutionModal() {
+        const me = app.state.players[app.myId];
+        if (me && !me.proceeded) {
+            const modal = document.getElementById('result-modal');
+            let cleanLogs = app.filterLogs(app.state.lastRoundEvents);
+            
+            const hasEvents = cleanLogs.some(line => line.includes('log-event'));
+            if (!hasEvents) {
+                cleanLogs.push(`<span class="log-event safe-status" style="color: var(--neon-green); border-left-color: var(--neon-green);">ALL SECTORS SECURE. EVERYONE IS SAFE.</span>`);
+            }
+            
+            document.getElementById('modal-log').innerHTML = cleanLogs.join('');
+            document.getElementById('modal-timer').innerText = app.state.timeLeft;
+            modal.classList.add('active');
+        } else {
+            document.getElementById('result-modal').classList.remove('active');
         }
     },
 
@@ -592,9 +708,16 @@ const app = {
             return;
         }
 
-        if (app.selectedAction.type === 'attack' && !app.selectedAction.target) {
-            app.showActionError("TARGET CONFIGURATION REQUIRED");
-            return;
+        // BUG FIX: Double-layer block to verify client is not forcing an illegal leftover attack signature
+        if (app.selectedAction.type === 'attack') {
+            if (app.state.attackCooldownEnabled && me.attackCooldown) {
+                app.showActionError("ATTACK CHARGE OFFLINE");
+                return;
+            }
+            if (!app.selectedAction.target) {
+                app.showActionError("TARGET CONFIGURATION REQUIRED");
+                return;
+            }
         }
 
         if (app.isHost) {
@@ -746,12 +869,12 @@ const app = {
             readyBtn.disabled = false;
             document.querySelectorAll('.act-btn').forEach(b => b.disabled = false);
             
+            // BUG FIX: Explicit programmatic lock reinforcement to keep Attack structural interfaces down when cooling down
             if (app.state.attackCooldownEnabled && me.attackCooldown) {
                 attackBtn.disabled = true;
             }
         }
 
-        // Apply fallback system to the permanent game-screen combat panel too
         const log = document.getElementById('history-log');
         let cleanHistory = app.filterLogs(app.state.history);
         
