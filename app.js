@@ -12,13 +12,21 @@ const app = {
     connections: [],
     hasManuallyChangedSize: false,
     
+    // Local configuration panel cache
+    config: {
+        detailedLog: true,
+        attackCooldown: false
+    },
+    
     state: {
-        phase: 'SETUP', // SETUP, LOBBY, PLAYING, INTERMISSION, GAMEOVER
+        phase: 'SETUP', // SETUP, SETTINGS, LOBBY, PLAYING, INTERMISSION, GAMEOVER
         roomCode: '',
         teamSize: 5,
         round: 1,
         timeLeft: CONFIG.ROUND_TIME,
-        players: {}, // peerId -> { id, name, team, col, pos, alive, action, ready, connected, defending, proceeded }
+        detailedLogEnabled: true,     // Authoritative synced logging rule
+        attackCooldownEnabled: false,  // Authoritative synced weapon rule
+        players: {}, // peerId -> { id, name, team, col, pos, alive, action, ready, connected, defending, proceeded, attackCooldown }
         history: [],
         lastRoundEvents: [],
         winner: ''
@@ -31,6 +39,16 @@ const app = {
     init() {
         const savedName = localStorage.getItem('pc_name');
         if (savedName) document.getElementById('player-name').value = savedName;
+        
+        // Load initial values from host configuration cache
+        const localDetailedLog = localStorage.getItem('pc_cfg_detailed_log');
+        app.config.detailedLog = localDetailedLog !== null ? (localDetailedLog === 'true') : true;
+        
+        const localAttackCooldown = localStorage.getItem('pc_cfg_attack_cooldown');
+        app.config.attackCooldown = localAttackCooldown !== null ? (localAttackCooldown === 'true') : false;
+
+        document.getElementById('setting-detailed-log').checked = app.config.detailedLog;
+        document.getElementById('setting-attack-cooldown').checked = app.config.attackCooldown;
     },
 
     showScreen(id) {
@@ -38,7 +56,22 @@ const app = {
         document.getElementById(id).classList.add('active');
     },
 
-    // Fixes Issue 2: Strictly numeric code generation algorithm
+    showSettings() {
+        document.getElementById('setting-detailed-log').checked = app.config.detailedLog;
+        document.getElementById('setting-attack-cooldown').checked = app.config.attackCooldown;
+        app.showScreen('settings-screen');
+    },
+
+    saveSettings() {
+        app.config.detailedLog = document.getElementById('setting-detailed-log').checked;
+        app.config.attackCooldown = document.getElementById('setting-attack-cooldown').checked;
+        
+        localStorage.setItem('pc_cfg_detailed_log', app.config.detailedLog);
+        localStorage.setItem('pc_cfg_attack_cooldown', app.config.attackCooldown);
+        
+        app.showScreen('setup-screen');
+    },
+
     generateRoomCode() {
         return Math.floor(10000 + Math.random() * 90000).toString();
     },
@@ -61,6 +94,11 @@ const app = {
         localStorage.setItem('pc_name', name);
         app.isHost = true;
         app.hasManuallyChangedSize = false;
+        
+        // Lock rules configuration directly into authoritative session flags
+        app.state.detailedLogEnabled = app.config.detailedLog;
+        app.state.attackCooldownEnabled = app.config.attackCooldown;
+        
         const code = app.generateRoomCode();
         
         try {
@@ -154,7 +192,8 @@ const app = {
             ready: false,
             connected: true,
             defending: false,
-            proceeded: false
+            proceeded: false,
+            attackCooldown: false
         };
     },
 
@@ -185,7 +224,6 @@ const app = {
         app.broadcastState();
     },
 
-    // Fixes Issue 4: Match initiation verification check
     startGame() {
         if (!app.isHost) return;
         
@@ -216,6 +254,10 @@ const app = {
     handleClientAction(id, actionData) {
         const p = app.state.players[id];
         if (!p || !p.alive || p.ready || app.state.phase !== 'PLAYING') return;
+        
+        if (app.state.attackCooldownEnabled && p.attackCooldown && actionData.type === 'attack') {
+            return; 
+        }
         
         p.action = actionData;
         p.ready = true;
@@ -306,7 +348,6 @@ const app = {
         app.broadcastState();
     },
 
-    // Fixes Issue 1: Absolute simultaneous calculation matrix eliminates chronological processing bugs
     resolveRound() {
         const players = app.state.players;
         const roundEvents = [];
@@ -332,7 +373,7 @@ const app = {
             }
         }
 
-        // Phase 3: Snapshot system records eligibility to allow fire if killed in this same iteration
+        // Phase 3: Snapshot generation
         const aliveAtStartOfAttack = {};
         for (const id in players) {
             aliveAtStartOfAttack[id] = players[id].alive;
@@ -340,7 +381,7 @@ const app = {
 
         const registeredCasualties = new Set();
 
-        // Phase 4: Attack computation based on target mapping status records
+        // Phase 4: Attack matrix calculations
         for (const id in players) {
             const attacker = players[id];
             if (aliveAtStartOfAttack[id] && attacker.action && attacker.action.type === 'attack') {
@@ -366,7 +407,7 @@ const app = {
             }
         }
 
-        // Phase 5: Simultaneous application of life-status mutations
+        // Phase 5: Simultaneous structural execution
         registeredCasualties.forEach(targetId => {
             if (players[targetId]) players[targetId].alive = false;
         });
@@ -374,11 +415,19 @@ const app = {
         app.state.lastRoundEvents = roundEvents;
         app.state.history.push(...roundEvents);
 
-        // Reset tracking flags
+        // Reset tracking flags and establish weapon lock cycles
         for (const id in players) {
-            players[id].ready = false;
-            players[id].action = null;
-            players[id].proceeded = false; 
+            const p = players[id];
+            
+            if (app.state.attackCooldownEnabled) {
+                p.attackCooldown = (p.action && p.action.type === 'attack');
+            } else {
+                p.attackCooldown = false;
+            }
+            
+            p.ready = false;
+            p.action = null;
+            p.proceeded = false; 
         }
 
         const blueAlive = Object.values(players).filter(p => p.team === 'BLUE' && p.alive).length > 0;
@@ -436,6 +485,18 @@ const app = {
         }
     },
 
+    // Evaluates the synced game rules instead of local storage values
+    filterLogs(logArray) {
+        if (app.state.detailedLogEnabled) return logArray;
+        
+        return logArray.filter(line => {
+            return line.includes('log-round') || 
+                   line.includes('[MISS]') || 
+                   line.includes('[BLOCKED]') || 
+                   line.includes('[ELIMINATED]');
+        });
+    },
+
     processState(newState) {
         app.state = newState;
         
@@ -465,7 +526,16 @@ const app = {
             const me = app.state.players[app.myId];
             if (me && !me.proceeded) {
                 const modal = document.getElementById('result-modal');
-                document.getElementById('modal-log').innerHTML = app.state.lastRoundEvents.join('');
+                
+                let cleanLogs = app.filterLogs(app.state.lastRoundEvents);
+                
+                // Fallback check if log output is completely clean of structural events
+                const hasEvents = cleanLogs.some(line => line.includes('log-event'));
+                if (!hasEvents) {
+                    cleanLogs.push(`<span class="log-event safe-status" style="color: var(--neon-green); border-left-color: var(--neon-green);">ALL SECTORS SECURE. EVERYONE IS SAFE.</span>`);
+                }
+                
+                document.getElementById('modal-log').innerHTML = cleanLogs.join('');
                 document.getElementById('modal-timer').innerText = app.state.timeLeft;
                 modal.classList.add('active');
             } else {
@@ -488,6 +558,8 @@ const app = {
     selectAction(type) {
         const me = app.state.players[app.myId];
         if (!me || !me.alive || me.ready || app.state.phase !== 'PLAYING') return;
+        
+        if (type === 'attack' && app.state.attackCooldownEnabled && me.attackCooldown) return;
 
         document.querySelectorAll('.act-btn').forEach(b => b.classList.remove('active-action'));
         document.getElementById(`btn-${type}`).classList.add('active-action');
@@ -568,7 +640,7 @@ const app = {
     },
 
     renderGame() {
-        const me = app.state.players[app.myId] || { team: 'SPECTATOR', alive: false };
+        const me = app.state.players[app.myId] || { team: 'SPECTATOR', alive: false, ready: false, attackCooldown: false };
         
         document.getElementById('round-display').innerText = app.state.round;
         document.getElementById('timer-display').innerText = app.state.timeLeft;
@@ -653,6 +725,16 @@ const app = {
         });
 
         const readyBtn = document.getElementById('btn-ready');
+        const attackBtn = document.getElementById('btn-attack');
+        
+        if (app.state.attackCooldownEnabled && me.attackCooldown) {
+            attackBtn.innerText = "RECHARGING";
+            attackBtn.classList.add('recharging');
+        } else {
+            attackBtn.innerText = "ATTACK";
+            attackBtn.classList.remove('recharging');
+        }
+
         if (!me.alive || app.state.phase !== 'PLAYING') {
             if (!me.alive) document.getElementById('action-status').innerText = "SPECTATING RADAR MATRIX";
             readyBtn.disabled = true;
@@ -663,10 +745,17 @@ const app = {
         } else {
             readyBtn.disabled = false;
             document.querySelectorAll('.act-btn').forEach(b => b.disabled = false);
+            
+            if (app.state.attackCooldownEnabled && me.attackCooldown) {
+                attackBtn.disabled = true;
+            }
         }
 
+        // Apply fallback system to the permanent game-screen combat panel too
         const log = document.getElementById('history-log');
-        log.innerHTML = app.state.history.map(item => `<div>${item}</div>`).join('');
+        let cleanHistory = app.filterLogs(app.state.history);
+        
+        log.innerHTML = cleanHistory.map(item => `<div>${item}</div>`).join('');
         log.scrollTop = log.scrollHeight;
     },
 

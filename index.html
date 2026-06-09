@@ -10,6 +10,7 @@
 <body>
     <div id="app">
         <div id="setup-screen" class="screen active">
+            <button class="settings-trigger-btn" onclick="app.showSettings()" title="System Configuration">⚙️</button>
             <h1 class="glitch" data-text="PHANTOM CELLS">PHANTOM CELLS</h1>
             <div class="panel">
                 <input type="text" id="player-name" placeholder="ENTER CODENAME" maxlength="12" autocomplete="off">
@@ -20,6 +21,31 @@
                     <button class="btn red" onclick="app.joinGame()">JOIN ROOM</button>
                 </div>
                 <p id="setup-error" class="error-text"></p>
+            </div>
+        </div>
+
+        <div id="settings-screen" class="screen">
+            <h2>SYSTEM CONFIGURATION</h2>
+            <div class="panel">
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="setting-detailed-log">
+                        <span class="custom-checkbox"></span>
+                        DETAILED COMBAT LOGS
+                    </label>
+                    <p class="setting-desc">Include structural grid movement tracking coordinates inside the event logs.</p>
+                </div>
+                
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="setting-attack-cooldown">
+                        <span class="custom-checkbox"></span>
+                        ATTACK WEAPONS COOLDOWN
+                    </label>
+                    <p class="setting-desc">Enforce a 1-round weapon recharge sequence immediately following any offensive strike.</p>
+                </div>
+                
+                <button class="btn full-width neon-green" onclick="app.saveSettings()">SAVE & RETURN</button>
             </div>
         </div>
 

@@ -29,6 +29,7 @@ h1, h2, h3 { font-family: 'Orbitron', sans-serif; text-align: center; }
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 .screen { display: none; padding: 20px; flex-direction: column; gap: 20px; align-items: center; justify-content: center; min-height: 100vh; }
@@ -45,6 +46,80 @@ h1, h2, h3 { font-family: 'Orbitron', sans-serif; text-align: center; }
     display: flex;
     flex-direction: column;
     gap: 15px;
+}
+
+/* Settings Trigger Button Elements */
+.settings-trigger-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: 1px solid var(--border-dim);
+    color: var(--text-main);
+    font-size: 1.4rem;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+.settings-trigger-btn:hover {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+    transform: rotate(45deg);
+}
+
+/* Settings Form Component Controls */
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+    padding-bottom: 12px;
+}
+.setting-item:last-of-type { border-bottom: none; }
+.setting-desc {
+    font-size: 0.85rem;
+    color: #888;
+    line-height: 1.3;
+    padding-left: 28px;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--text-main);
+    gap: 10px;
+}
+.checkbox-label input { display: none; }
+.custom-checkbox {
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    background: #000;
+    display: inline-block;
+    position: relative;
+    flex-shrink: 0;
+}
+.checkbox-label input:checked + .custom-checkbox {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 8px rgba(0, 243, 255, 0.4);
+    background: rgba(0, 243, 255, 0.1);
+}
+.checkbox-label input:checked + .custom-checkbox::after {
+    content: "✓";
+    position: absolute;
+    color: var(--neon-blue);
+    font-size: 0.85rem;
+    font-weight: bold;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
 }
 
 input, select {
@@ -82,6 +157,15 @@ input:focus { border-color: var(--neon-blue); box-shadow: 0 0 8px rgba(0, 243, 2
 .btn.neon-green:hover { background: rgba(57, 255, 20, 0.1); box-shadow: 0 0 10px var(--neon-green); }
 .btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 .btn.full-width { width: 100%; }
+
+/* Recharging layout state variations */
+.btn.act-btn.recharging {
+    border-color: #444455 !important;
+    color: #555566 !important;
+    background: rgba(20, 20, 25, 0.6) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
 
 .divider { text-align: center; color: #666; font-size: 0.9rem; }
 .error-text { color: var(--neon-red); text-align: center; font-size: 0.9rem; min-height: 1.2rem; }
@@ -187,4 +271,5 @@ input:focus { border-color: var(--neon-blue); box-shadow: 0 0 8px rgba(0, 243, 2
     .cell-name { font-size: 0.75rem; }
     .action-buttons { gap: 6px; }
     .act-btn { font-size: 0.75rem; padding: 8px 2px; }
+    .settings-trigger-btn { top: 10px; right: 10px; font-size: 1.2rem; padding: 4px 8px; }
 }
